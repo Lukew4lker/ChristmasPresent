@@ -1,0 +1,228 @@
+; --------------------------------------------
+; Title:   multitasker
+; Author:  Alex
+; Date:    10/15/2012
+; Version: 
+; --------------------------------------------
+
+;@name pm_add_proc
+;adds a program to the program tables
+;@params A the filepath of the program
+;@returns A the program ID (needed to kill it), -1 if there wasn't room
+;@see thePalindrome	
+:pm_add_proc
+    IFE A, 0xFFFF
+	    SUB PC, 1 ;OH NOES!!!!!!!!
+    JSR fd_load_prog
+    SET PUSH, B
+	SET PUSH, C
+	SET C, 0
+	SET B, multitasker_Progs_0
+	SUB B, 0xC
+	
+	ADD C, 1
+	ADD B, 0xC
+	IFN [B], 0
+	    IFL 0xF, C
+	        SUB PC, 5 ; B now points to an empty program slot
+	
+    IFL C, 0x11
+		ADD PC, 4
+	SET A, -1
+	SET C, POP
+	SET B, POP
+	SET PC, POP
+	
+	SET [B], A
+	
+	SET A, B
+	SET C, POP
+	SET B, POP
+	SET PC, POP
+	
+:pm_kill_me
+    SET A, [multitasker_curProg]
+	JSR pm_kill
+	
+;@name pm_kill
+;removes a program from the program list
+;@params A the program ID
+;@see thePalindrome
+:pm_kill ; TODO add special case if trying to kill current program
+    MUL A, 0xB
+    ADD A, multitasker_Progs_0
+	SET [A], 0
+	ADD A, 1
+	SET [A], 0
+	ADD A, 1
+	SET [A], 0
+	ADD A, 1
+	SET [A], 0
+	ADD A, 1
+	SET [A], 0
+	ADD A, 1
+	SET [A], 0
+	ADD A, 1
+	SET [A], 0
+	ADD A, 1
+	SET [A], 0
+	ADD A, 1
+	SET [A], 0
+	ADD A, 1
+	SET [A], 0
+	ADD A, 2
+	SET PUSH, [A]
+	SUB A, 1
+	SET [A], POP
+	SET PC, POP
+	
+;@name multitasker_Interrupt
+;handles the main interrupt NOTE: From top, stack is: PC (stay), PC (stay), A (replace), PC (replace)
+;@see thePalindrome
+:multitasker_Interrupt
+    IFN [multitasker_preemption_lock], 0
+	    SET PC, POP
+    SET PUSH, A
+	SET A, multitasker_Progs_0
+	SET PUSH, B
+	SET B, [multitasker_curProg]
+	MUL B, 0xC
+	ADD A, B
+	SET B, POP ;at this point, A points to multitasker_Progs_(number of cur prog)
+	ADD A, 1
+	SUB [A], 1
+	IFE [A], 0
+	    SET PC, .continue
+	SET A, POP
+	SET PC, POP
+	:.continue
+	ADD A, 1
+	SET [A], POP
+	ADD A, 1
+	SET [A], B
+	ADD A, 1
+	SET [A], C
+	ADD A, 1
+	SET [A], I
+	ADD A, 1
+	SET [A], X
+	ADD A, 1
+	SET [A], Y
+	ADD A, 1
+	SET [A], Z
+	ADD A, 1
+	SET [A], J
+	
+	SET B, SP
+	ADD B, 3 ;B now points to the location in the Stack where the old program was running
+	ADD A, 1
+	SET [A], [B]
+	
+	ADD B, 1
+	SET [A], B ; SP has been saved for the new program
+	SUB A, 10
+	
+	ADD [multitasker_curProg], 1
+	ADD A, 0xC
+	IFL multitasker_Progs_end, A
+	    SET A, multitasker_Progs_0
+	IFE [A], 0 ;If there's no program loaded (+1 code of hangs-if-no-programs-available)
+	    SUB PC, 7
+		
+	ADD A, 10 ; THIS IS THE PART WHERE WE LOAD A NEW PROGRAM
+	SET SP, [A] ;The stack will now return to the new program
+	SUB A, 9
+	SET [A], 14 ; each program gets 14 ticks
+	ADD A, 8 ; A now points to the J register of the new program
+	SET J, [A]
+	SUB A, 1
+	SET Z, [A]
+	SUB A, 1
+	SET Y, [A]
+	SUB A, 1
+	SET X, [A]
+	SUB A, 1
+	SET I, [A]
+	SUB A, 1
+	SET C, [A]
+	SUB A, 1
+	SET B, [A]
+	SUB A, 2
+	SUB B, 2
+	SET PUSH, [A]
+	SET PUSH, [B]
+	SUB B, 1
+	SET PUSH, [B]
+	SET B, 1
+	SET PUSH, [B]
+	ADD A, 1
+	SET A, [A]
+	SET [current_process], [multitasker_curProg]
+		
+	:multitasker_Interrupt_End
+    SET PC, POP
+
+; By Lukew4lker
+; Program_Manager - Retrive program information from data structure 
+; A input process number (Starting from 0), If no input then use current process.
+; b is data type offset as defined by the program manager's data structure for programs 
+; Returns B as data, A is preserved 
+ 
+	:multitasker_GetInfo
+	set push, a
+	set push, c
+	set push, x
+	set x, 0x0  ; Set pre-emption check bol value to 0 so that we don't get incorrect data later.
+	ife a, 0x0
+		set pc, .usecurProg
+	mul a, 0xc  ; standard data structure size (12 bits)
+	set c, multitasker_Progs_0
+	add a, c  ;now points the process address in ram
+	
+	:.start
+	add a, b; add the off defined by the input
+	set b, [a]
+	ife x, 1 ;check's if preemption stopped
+		sub [multitasker_preemption_lock], 1
+;add ticks used handler here if used No preemption? 
+	set x, pop
+	set c, pop
+	set a, pop
+	set pc, pop
+
+	:.usecurProg
+	set x, 0x1
+	add [multitasker_preemption_lock], 1; set so that we don't don't lose the current process to a process swhich.
+	set a, [multitasker_curProg]
+	mul a, 0xc
+	set c, multitasker_Progs_0
+	add a, c
+	set pc, .start
+	
+:multitasker_curProg dat 0
+:multitasker_preemption_lock dat 1
+
+;Definition of datastructure
+;Current PC
+;How many ticks are left
+;Registers (ABCIXYZJ)
+;Where the stack is hiding
+;Where the bottom of the stack is hiding
+:multitasker_Progs_0 dat 0,0,0,0,0,0,0,0,0,0,0,0
+:multitasker_Progs_1 dat 0,0,0,0,0,0,0,0,0,0,0,0
+:multitasker_Progs_2 dat 0,0,0,0,0,0,0,0,0,0,0,0
+:multitasker_Progs_3 dat 0,0,0,0,0,0,0,0,0,0,0,0
+:multitasker_Progs_4 dat 0,0,0,0,0,0,0,0,0,0,0,0
+:multitasker_Progs_5 dat 0,0,0,0,0,0,0,0,0,0,0,0
+:multitasker_Progs_6 dat 0,0,0,0,0,0,0,0,0,0,0,0
+:multitasker_Progs_7 dat 0,0,0,0,0,0,0,0,0,0,0,0
+:multitasker_Progs_8 dat 0,0,0,0,0,0,0,0,0,0,0,0
+:multitasker_Progs_9 dat 0,0,0,0,0,0,0,0,0,0,0,0
+:multitasker_Progs_10 dat 0,0,0,0,0,0,0,0,0,0,0,0
+:multitasker_Progs_11 dat 0,0,0,0,0,0,0,0,0,0,0,0
+:multitasker_Progs_12 dat 0,0,0,0,0,0,0,0,0,0,0,0
+:multitasker_Progs_13 dat 0,0,0,0,0,0,0,0,0,0,0,0
+:multitasker_Progs_14 dat 0,0,0,0,0,0,0,0,0,0,0,0
+:multitasker_Progs_15 dat 0,0,0,0,0,0,0,0,0,0,0,0
+:multitasker_Progs_end
+:multitasker_Prog_max

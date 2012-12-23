@@ -1,0 +1,118 @@
+set a, 0x00c0
+jsr [0x2]; request memory 
+ife a, 0xffff
+sub pc, 1
+set c, a
+set a, 0x0
+set b, 0x0
+sub pc, 1
+jsr [26]; Fd_list , gives back a and c
+Ife a, 0xffff
+	sub pc, 1 ; die
+set a, 0x0180
+jsr [0x2]; request memory 
+Ife a, 0xffff
+sub pc, 1 ; die
+set push, a
+set j, 0x0
+HWQ J
+IFE B, 0x7349
+IFE A, 0xF615 
+add pc, 2
+add j, 1
+sub pc, 8
+set b, pop; pop a into b
+set a, 0x0			
+HWI j; set to locationg of screen
+; comment out when build.py works
+set c, pc 
+set c, 0x0f0c
+; comment out when build.py works
+set i, b; screen
+set j, c; dir information
+set z, 0x0
+set x, 0
+set y, 0
+sub i, 1
+
+
+:.convertloop				;good
+ifg z, 0x10
+	sub pc, 1 ; hang incase of overflow. (should stop here)
+add i, 0x1
+ife x, 0x8;number of chars on screen
+	add pc, 0x1d ; hndlextention
+set c, [j]
+and c, 0xff00
+shr c, 0x8
+ife c, 0x0000
+	add pc, 0x11;set pc, [.zeropadhndl] handle 0 pad here
+bor c, 0x2000
+add x, 0x1;counts numbers of writes to i
+set [i], c
+add i, 1;==============================
+set c, [j]
+and c, 0x00ff
+ife c, 0x0000
+	add pc, 0x7 ;set pc, [.zeropadhndl] handle 0 pad here
+bor c, 0x2000
+add x, 0x1;counts numbers of writes to i
+set [i], c
+add j, 0x1
+add y, 0x1; counts number of times j has been changed
+sub pc, 0x1c ;set pc, [.convertloop]
+
+:.zeropadhndl ; returns code to zero or first word of file name and goes to handle extentions
+:.loop
+ife y, 0x3
+add pc, 0x3
+add y, 1
+add j, 1
+sub pc, 5
+:.exit
+
+:.handleextention
+add j,1
+set c, [j]  
+and c, 0xff00
+shr c, 0x8
+bor c, 0x2000
+set [i], c
+set c, [j]  
+and c, 0x00ff
+bor c, 0x2000
+add i, 0x1
+set [i], c
+add j, 1
+set c, [j]  
+and c, 0xff00
+shr c, 8
+bor c, 0x2000
+add i, 0x1
+set [i], c 
+add j, 0x1 ;next file name should start at j after operation
+set c, i
+sub c, b
+sub i, c
+add i, 0x20
+set x, 0x0
+add z, 0x1
+sub pc, 0x44 ;set pc, [.convertloop]
+
+
+
+
+
+:init.bin
+.dat 0x494e, 0x4954
+.dat 0x0000, 0x0000
+.dat 0x4249, 0x4e00
+;DaftPunk
+.dat 0x4461, 0x6674
+.dat 0x5075, 0x6e6b
+.dat 0x6578, 0x65ff		
+
+
+
+
+
